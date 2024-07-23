@@ -1,4 +1,3 @@
-// database.js
 const mongoose = require('mongoose');
 require('dotenv').config();
 
@@ -9,8 +8,6 @@ const connectDB = async () => {
     await mongoose.connect(uri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      useCreateIndex: true,
-      useFindAndModify: false,
     });
     console.log('MongoDB connected');
   } catch (error) {
