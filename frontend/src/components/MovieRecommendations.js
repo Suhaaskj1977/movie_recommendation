@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { recommendationService } from '../services/api';
 import DNA from './DNA';
 
@@ -13,8 +13,10 @@ const Navbar = () => (
 
 const MovieCard = ({ movie }) => (
   <div className="bg-[#3C2A21] p-4 rounded-lg shadow-lg">
-    <h3 className="text-[#E5E5CB] text-xl font-semibold">{movie}</h3>
-    {/* You can add an image here later */}
+    {movie.Poster && movie.Poster !== 'N/A' && (
+      <img src={movie.Poster} alt={`${movie.Title} poster`} className="mb-4 rounded" />
+    )}
+    <h3 className="text-[#E5E5CB] text-xl font-semibold">{movie.Title}</h3>
   </div>
 );
 
@@ -34,7 +36,11 @@ const MovieRecommendations = () => {
 
     try {
       const result = await recommendationService.getRecommendations(movieName, movieLanguage, yearGap, k);
-      setRecommendations(result);
+      const moviesWithPosters = await Promise.all(result.map(async (movie) => {
+        const movieDetails = await recommendationService.getMovieDetails(movie);
+        return { ...movie, Poster: movieDetails.Poster };
+      }));
+      setRecommendations(moviesWithPosters);
       setShowForm(false);
     } catch (err) {
       setError('Failed to get recommendations. Please try again.');
