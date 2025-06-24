@@ -1,264 +1,246 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { recommendationService } from '../services/api';
+import { recommendationService, api } from '../services/api';
+import Select from 'react-select';
 
 const MovieRecommendations = () => {
+  const [mode, setMode] = useState('search'); // 'search' or 'discover'
   const [showForm, setShowForm] = useState(true);
+  
+  // Search Form State
   const [movieName, setMovieName] = useState('');
-  const [movieLanguage, setMovieLanguage] = useState('');
   const [yearGap, setYearGap] = useState('');
   const [k, setK] = useState(5);
+
+  // Discover Form State
+  const [discoverGenres, setDiscoverGenres] = useState([]);
+  const [discoverLanguages, setDiscoverLanguages] =useState([]);
+
+  // General State
   const [recommendations, setRecommendations] = useState([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Language Clarification State
+  const [languageOptions, setLanguageOptions] = useState(null);
+  const [pendingMovieName, setPendingMovieName] = useState('');
 
-  const handleSubmit = async (e) => {
+  // Data for selects
+  const [allGenres, setAllGenres] = useState([]);
+  const [allLanguages, setAllLanguages] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [genresRes, languagesRes] = await Promise.all([
+          api.get('/recommendations/genres'),
+          api.get('/recommendations/languages')
+        ]);
+        setAllGenres(genresRes.data.genres.map(g => ({ value: g, label: g })));
+        setAllLanguages(languagesRes.data.languages.map(l => ({ value: l, label: l })));
+      } catch (err) {
+        console.error("Failed to fetch genres/languages", err);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleSearchSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setRecommendations([]);
     setIsLoading(true);
-
+    setLanguageOptions(null);
     try {
-      const result = await recommendationService.getRecommendations(movieName, movieLanguage, yearGap, k);
-      const moviesWithPosters = await Promise.all(result.map(async (movie) => {
-        try {
-          const movieDetails = await recommendationService.getMovieDetails(movie);
-          // Original script returns names, so we create an object
-          return { Title: movie, Poster: movieDetails.Poster };
-        } catch {
-          return { Title: movie, Poster: null };
-        }
-      }));
-      setRecommendations(moviesWithPosters);
+      const result = await recommendationService.getRecommendations(movieName, null, yearGap, k);
+      setRecommendations(result.recommendations);
       setShowForm(false);
     } catch (err) {
-      setError('Failed to get recommendations. Please try again.');
+      if (err.requiresLanguage) {
+        setError(err.error);
+        setLanguageOptions(err.languageOptions);
+        setPendingMovieName(movieName);
+      } else {
+        setError(err.error || 'An unexpected error occurred.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleDiscoverSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+    try {
+      const genres = discoverGenres.map(g => g.value);
+      const languages = discoverLanguages.map(l => l.value);
+      const result = await recommendationService.discoverMovies(genres, languages, k);
+      setRecommendations(result.recommendations);
+      setShowForm(false);
+    } catch (err) {
+      setError(err.error || 'An unexpected error occurred.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLanguageSelect = async (selectedLanguage) => {
+    setError('');
+    setIsLoading(true);
+    setLanguageOptions(null);
+
+    try {
+      const result = await recommendationService.getRecommendations(pendingMovieName, selectedLanguage, yearGap, k);
+      setRecommendations(result.recommendations);
+      setShowForm(false);
+    } catch (err) {
+      setError(err.error || 'An unexpected error occurred.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetSearch = () => {
+    setShowForm(true);
+    setMovieName('');
+    setYearGap('');
+    setRecommendations([]);
+    setError('');
+    setLanguageOptions(null);
+  }
+
   const MovieCard = ({ movie, index }) => (
     <motion.div
-      className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-all duration-300"
-      initial={{ opacity: 0, y: 20 }}
+      className="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200 hover:shadow-xl hover:border-blue-500 transition-all duration-300 transform hover:-translate-y-1"
+      initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
-      whileHover={{ y: -5 }}
+      transition={{ delay: index * 0.08 }}
     >
-      {movie.Poster && movie.Poster !== 'N/A' ? (
-        <div className="aspect-[2/3] overflow-hidden">
-          <img 
-            src={movie.Poster} 
-            alt={`${movie.Title} poster`} 
-            className="w-full h-full object-cover"
-          />
+      <div className="p-5">
+        <h3 className="font-bold text-gray-800 text-lg mb-2 line-clamp-2">{movie.Title}</h3>
+        <div className="flex justify-between items-center text-sm text-gray-500 mb-3">
+          <span>{movie.Year}</span>
+          <span className="font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{movie.Language}</span>
         </div>
-      ) : (
-        <div className="aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-          <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2M7 4h10M7 4l-2 14a2 2 0 002 2h10a2 2 0 002-2L17 4M9 10v4M15 10v4" />
-          </svg>
+        <p className="text-gray-600 text-sm mb-4 line-clamp-3">{movie.Genre}</p>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-500">Match Score</span>
+          <span className="font-bold text-green-600">{Math.round(movie.similarity_score * 100)}%</span>
         </div>
-      )}
-      <div className="p-4">
-        <h3 className="font-semibold text-gray-900 text-lg mb-1 line-clamp-2">{movie.Title}</h3>
-        {movie.Year && (
-          <p className="text-gray-500 text-sm">{movie.Year}</p>
-        )}
-        {movie.Genre && (
-          <p className="text-gray-600 text-sm mt-1 line-clamp-1">{movie.Genre}</p>
-        )}
+        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+          <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${movie.similarity_score * 100}%` }}></div>
+        </div>
       </div>
     </motion.div>
   );
 
+  const SearchForm = () => (
+    <form onSubmit={handleSearchSubmit} className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Movie Title</label>
+        <input type="text" value={movieName} onChange={(e) => setMovieName(e.target.value)} required className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="e.g., Baahubali, KGF"/>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Year Gap (Optional)</label>
+          <input type="text" value={yearGap} onChange={(e) => setYearGap(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="e.g., 2010-2020"/>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
+          <input type="number" value={k} onChange={(e) => setK(parseInt(e.target.value, 10))} min="1" max="20" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"/>
+        </div>
+      </div>
+      {/* Language Clarification */}
+      {languageOptions && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 bg-blue-50 rounded-lg">
+          <p className="text-sm text-blue-800 mb-3">{error}. Please choose one:</p>
+          <div className="flex flex-wrap gap-2">
+            {languageOptions.map((opt, i) => (
+              <button key={i} type="button" onClick={() => handleLanguageSelect(opt.Language)} className="px-3 py-1 bg-blue-500 text-white rounded-full text-sm hover:bg-blue-600">
+                {opt.Language} ({opt.Year})
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      )}
+      {error && !languageOptions && (
+        <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+      )}
+      <motion.button type="submit" disabled={isLoading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full bg-gray-900 text-white py-3 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 disabled:opacity-50">
+        {isLoading ? 'Searching...' : 'Find Recommendations'}
+      </motion.button>
+    </form>
+  );
+
+  const DiscoverForm = () => (
+    <form onSubmit={handleDiscoverSubmit} className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Genres</label>
+        <Select
+          isMulti
+          options={allGenres}
+          value={discoverGenres}
+          onChange={setDiscoverGenres}
+          placeholder="Select one or more genres..."
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Languages</label>
+        <Select
+          isMulti
+          options={allLanguages}
+          value={discoverLanguages}
+          onChange={setDiscoverLanguages}
+          placeholder="Select one or more languages..."
+        />
+      </div>
+       <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
+          <input type="number" value={k} onChange={(e) => setK(parseInt(e.target.value, 10))} min="1" max="20" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"/>
+       </div>
+      <motion.button type="submit" disabled={isLoading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full bg-gray-900 text-white py-3 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 disabled:opacity-50">
+        {isLoading ? 'Searching...' : 'Discover Movies'}
+      </motion.button>
+    </form>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
-      <div className="max-w-7xl mx-auto px-6 py-12">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <AnimatePresence mode="wait">
           {showForm ? (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
-              className="max-w-2xl mx-auto"
-            >
-              {/* Header */}
-              <div className="text-center mb-12">
-                <motion.h1 
-                  className="text-4xl md:text-5xl font-bold text-gray-900 mb-4"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  Discover Movies
-                </motion.h1>
-                <motion.p 
-                  className="text-xl text-gray-600 max-w-lg mx-auto"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  Tell us about a movie you love, and we'll find similar films you'll enjoy
-                </motion.p>
+            <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-2xl mx-auto">
+              <div className="text-center mb-10">
+                <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-3">Movie Discovery</h1>
+                <p className="text-lg text-gray-600">Find your next favorite film, with or without a title in mind.</p>
               </div>
 
-              {/* Form */}
-              <motion.div
-                className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1, duration: 0.5 }}
-              >
-                {/* Error Message */}
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm"
-                  >
-                    {error}
-                  </motion.div>
-                )}
+              <div className="bg-white rounded-2xl shadow-lg p-2 mb-8 flex space-x-2">
+                <button onClick={() => setMode('search')} className={`w-1/2 py-3 rounded-xl font-semibold ${mode === 'search' ? 'bg-gray-900 text-white' : 'bg-transparent text-gray-600'}`}>
+                  Search by Title
+                </button>
+                <button onClick={() => setMode('discover')} className={`w-1/2 py-3 rounded-xl font-semibold ${mode === 'discover' ? 'bg-gray-900 text-white' : 'bg-transparent text-gray-600'}`}>
+                  Discover by Filter
+                </button>
+              </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Movie Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Movie Title
-                    </label>
-                    <input
-                      type="text"
-                      value={movieName}
-                      onChange={(e) => setMovieName(e.target.value)}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
-                      placeholder="e.g., The Dark Knight, Inception, Pulp Fiction"
-                    />
-                  </div>
-
-                  {/* Movie Language */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Language
-                    </label>
-                    <input
-                      type="text"
-                      value={movieLanguage}
-                      onChange={(e) => setMovieLanguage(e.target.value)}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
-                      placeholder="e.g., English, Spanish, French"
-                    />
-                  </div>
-
-                  {/* Year Gap */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Year Range (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={yearGap}
-                      onChange={(e) => setYearGap(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
-                      placeholder="e.g., 2010-2020 or leave blank for all years"
-                    />
-                  </div>
-
-                  {/* Number of Recommendations */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Number of Recommendations
-                    </label>
-                    <select
-                      value={k}
-                      onChange={(e) => setK(Number(e.target.value))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
-                    >
-                      {[5, 10, 15, 20].map((num) => (
-                        <option key={num} value={num}>
-                          {num} movies
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Submit Button */}
-                  <motion.button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-gray-900 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    whileHover={{ scale: isLoading ? 1 : 1.02 }}
-                    whileTap={{ scale: isLoading ? 1 : 0.98 }}
-                  >
-                    {isLoading ? (
-                      <div className="flex items-center justify-center space-x-3">
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Finding recommendations...</span>
-                      </div>
-                    ) : (
-                      'Get Recommendations'
-                    )}
-                  </motion.button>
-                </form>
+              <motion.div className="bg-white rounded-2xl shadow-lg p-8" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
+                {mode === 'search' ? <SearchForm /> : <DiscoverForm />}
               </motion.div>
             </motion.div>
           ) : (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
-            >
-              {/* Results Header */}
-              <div className="text-center mb-12">
-                <motion.h1 
-                  className="text-4xl md:text-5xl font-bold text-gray-900 mb-4"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  Recommended for You
-                </motion.h1>
-                <motion.p 
-                  className="text-xl text-gray-600"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
-                  Based on "{movieName}" • {recommendations.length} movies found
-                </motion.p>
+            <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <div className="text-center mb-10">
+                <h1 className="text-4xl font-extrabold text-gray-900">Recommendations</h1>
+                <p className="text-lg text-gray-600 mt-2">Based on your love for "{pendingMovieName || movieName}"</p>
               </div>
-
-              {/* Movies Grid */}
-              <motion.div 
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-12"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                {recommendations.map((movie, index) => (
-                  <MovieCard key={index} movie={movie} index={index} />
-                ))}
-              </motion.div>
-
-              {/* Back Button */}
-              <div className="text-center">
-                <motion.button 
-                  onClick={() => setShowForm(true)}
-                  className="bg-white text-gray-900 py-3 px-8 rounded-xl font-semibold border-2 border-gray-900 hover:bg-gray-900 hover:text-white transition-all duration-300 shadow-lg"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {recommendations.map((movie, index) => <MovieCard key={index} movie={movie} index={index} />)}
+              </div>
+              <div className="text-center mt-12">
+                <button onClick={resetSearch} className="bg-white text-gray-800 py-2 px-6 rounded-xl font-semibold border-2 border-gray-300 hover:bg-gray-100">
                   Search Again
-                </motion.button>
+                </button>
               </div>
             </motion.div>
           )}

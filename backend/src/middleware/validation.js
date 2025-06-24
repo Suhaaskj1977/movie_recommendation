@@ -127,11 +127,10 @@ const validateMovieRecommendation = [
     .withMessage('Movie name must be between 1 and 200 characters'),
   
   body('movieLanguage')
+    .optional()
     .trim()
-    .notEmpty()
-    .withMessage('Movie language is required')
     .isLength({ min: 1, max: 50 })
-    .withMessage('Movie language must be between 1 and 50 characters'),
+    .withMessage('Movie language must be between 1 and 50 characters if provided'),
   
   body('yearGap')
     .optional({ checkFalsy: true })

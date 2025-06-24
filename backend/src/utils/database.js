@@ -1,9 +1,15 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const uri = "mongodb+srv://Vishnu:Vishnu234@harmoney-cluster.tdgmi.mongodb.net/?retryWrites=true&w=majority&appName=Harmoney-cluster";
+// The URI will now be loaded from process.env, which is populated by dotenv
+const uri = process.env.MONGODB_URI;
 
 const connectDB = async () => {
+  if (!uri) {
+    console.error('FATAL: MONGODB_URI is not defined. Please create a .env file in the /backend directory with this variable.');
+    process.exit(1);
+  }
+
   try {
     await mongoose.connect(uri, {
       useNewUrlParser: true,

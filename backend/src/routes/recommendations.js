@@ -12,10 +12,45 @@ const {
   validateMovieRecommendation,
   sanitizeInput
 } = require('../middleware/validation');
+const RecommendationHistory = require('../models/RecommendationHistory');
 
-// Reverted to the original recommendation service
-const PYTHON_SCRIPT_PATH = path.join(__dirname, '../services/recommendationServices.py');
+// Use the enhanced recommendation service
+const PYTHON_SCRIPT_PATH = path.join(__dirname, '../services/enhanced_recommendation_service.py');
 const VENV_PYTHON_PATH = path.join(__dirname, '../../venv/bin/python');
+
+// Helper function to run the Python script
+const runPythonScript = (args) => {
+  return new Promise((resolve, reject) => {
+    const pythonProcess = spawn(VENV_PYTHON_PATH, [PYTHON_SCRIPT_PATH, ...args]);
+    let dataString = '';
+    let errorString = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      dataString += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorString += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`Python script error: ${errorString}`);
+        return reject(new Error('Recommendation service failed.'));
+      }
+      try {
+        const result = JSON.parse(dataString);
+        resolve(result);
+      } catch (parseError) {
+        reject(new Error('Failed to parse recommendation response.'));
+      }
+    });
+
+    pythonProcess.on('error', (err) => {
+      reject(err);
+    });
+  });
+};
 
 // Get movie recommendations
 router.post('/', 
@@ -26,74 +61,64 @@ router.post('/',
   updateLastActivity,
   logActivity('GET_RECOMMENDATIONS'),
   async (req, res, next) => {
-    console.log('Received request for recommendations');
-    console.log('Request body:', req.body);
-    console.log('User:', req.user.email);
-
+    console.log('Received request for smart recommendations');
     const { movieName, movieLanguage, yearGap, k } = req.body;
 
     try {
-      console.log('Spawning Python process');
-      console.log('Python script path:', PYTHON_SCRIPT_PATH);
-      console.log('Virtual environment Python path:', VENV_PYTHON_PATH);
-      
-      const pythonProcess = spawn(VENV_PYTHON_PATH, [
-        PYTHON_SCRIPT_PATH,
-        movieName,
-        movieLanguage,
+      const args = [
+        'recommend',
+        movieName.trim(),
+        movieLanguage || '',
         yearGap || '',
         k ? k.toString() : '5'
-      ]);
+      ];
+      const result = await runPythonScript(args);
+      
+      if (result.error) {
+        return res.status(400).json(result);
+      }
 
-      let dataString = '';
-      let errorString = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        console.log('Received data from Python script:', data.toString());
-        dataString += data.toString();
+      // Save to history if recommendations are successful
+      const historyEntry = new RecommendationHistory({
+        user: req.user.id,
+        searchQuery: { movieName, movieLanguage, yearGap, k },
+        recommendations: result,
       });
+      await historyEntry.save();
 
-      pythonProcess.stderr.on('data', (data) => {
-        console.error(`Python script error: ${data}`);
-        errorString += data.toString();
-      });
+      res.json({ recommendations: result });
 
-      pythonProcess.on('error', (error) => {
-        console.error(`Error spawning Python process: ${error}`);
-        res.status(500).json({ 
-          error: 'Failed to start recommendation service',
-          code: 'SERVICE_START_ERROR'
-        });
-      });
-
-      pythonProcess.on('close', (code) => {
-        console.log(`Python process exited with code ${code}`);
-        
-        if (code !== 0) {
-          return res.status(500).json({ 
-            error: 'An error occurred while processing the recommendation',
-            code: 'RECOMMENDATION_PROCESSING_ERROR',
-            details: errorString || 'Unknown error'
-          });
-        }
-        
-        try {
-          // The original script returns a simple list of movie names
-          const recommendations = JSON.parse(dataString);
-          console.log('Sending recommendations:', recommendations);
-          
-          res.json(recommendations); // Send back the array directly
-        } catch (error) {
-          console.error('Error parsing Python script output:', error);
-          res.status(500).json({ 
-            error: 'An error occurred while processing the recommendation response',
-            code: 'RESPONSE_PARSING_ERROR'
-          });
-        }
-      });
     } catch (error) {
-      console.error('Unexpected error:', error);
-      next(error);
+      console.error("Error during recommendation process:", error);
+      res.status(500).json({ error: error.message || 'An unexpected server error occurred.' });
+    }
+  }
+);
+
+// Discover movies by genre and language
+router.post('/discover',
+  apiLimiter,
+  authenticateToken,
+  logActivity('DISCOVER_MOVIES'),
+  async (req, res) => {
+    const { genres, languages, k } = req.body;
+
+    try {
+      const args = [
+        'discover',
+        genres ? genres.join(',') : '',
+        languages ? languages.join(',') : '',
+        k ? k.toString() : '10'
+      ];
+      const result = await runPythonScript(args);
+      
+      if (result.error) {
+        return res.status(400).json(result);
+      }
+      res.json({ recommendations: result });
+    } catch (error) {
+      console.error("Error during discovery process:", error);
+      res.status(500).json({ error: error.message || 'An unexpected server error occurred.' });
     }
   }
 );
@@ -106,11 +131,13 @@ router.get('/history',
   logActivity('GET_RECOMMENDATION_HISTORY'),
   async (req, res) => {
     try {
-      // TODO: Implement recommendation history tracking
-      // This would require a new model to store recommendation requests
+      const history = await RecommendationHistory.find({ user: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(50); // Limit to the 50 most recent history items
+
       res.json({
-        message: 'Recommendation history feature coming soon',
-        history: []
+        message: 'Recommendation history retrieved successfully',
+        history,
       });
     } catch (error) {
       console.error('Get recommendation history error:', error);

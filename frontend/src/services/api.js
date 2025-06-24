@@ -43,6 +43,8 @@ const authService = {
   },
   
   logout: () => {
+    // The AuthContext will handle state updates.
+    // This function's only job is to clear storage.
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   },
@@ -56,14 +58,29 @@ const authService = {
 const recommendationService = {
     getRecommendations: async (movieName, movieLanguage, yearGap, k) => {
       console.log('Sending request to:', `${API_URL}/recommendations`);
-      console.log('Request payload:', { movieName, movieLanguage, yearGap, k });
+      const payload = { movieName, yearGap, k };
+      if (movieLanguage) {
+        payload.movieLanguage = movieLanguage;
+      }
+
       try {
-        const response = await api.post('/recommendations', { movieName, movieLanguage, yearGap, k });
+        const response = await api.post('/recommendations', payload);
         console.log('Received response:', response.data);
         return response.data;
       } catch (error) {
         console.error('Error fetching recommendations:', error.response ? error.response.data : error.message);
-        throw error;
+        // Forward the specific error from the backend
+        throw error.response.data;
+      }
+    },
+
+    getHistory: async () => {
+      try {
+        const response = await api.get('/recommendations/history');
+        return response.data.history;
+      } catch (error) {
+        console.error('Error fetching recommendation history:', error.response ? error.response.data : error.message);
+        throw error.response.data;
       }
     },
 
@@ -73,6 +90,17 @@ const recommendationService = {
       return {
         Poster: 'https://via.placeholder.com/300x450/cccccc/666666?text=Movie+Poster'
       };
+    },
+
+    discoverMovies: async (genres, languages, k) => {
+      try {
+        const payload = { genres, languages, k };
+        const response = await api.post('/recommendations/discover', payload);
+        return response.data;
+      } catch (error) {
+        console.error('Error discovering movies:', error.response ? error.response.data : error.message);
+        throw error.response.data;
+      }
     },
 };
   export { api, authService, recommendationService };

@@ -4,19 +4,22 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { authService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const { register, handleSubmit, formState: { errors } } = useForm();
   const [serverError, setServerError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const onSubmit = async (data) => {
     setIsLoading(true);
     setServerError('');
     
     try {
-      await authService.login(data.email, data.password);
+      const userData = await authService.login(data.email, data.password);
+      login(userData);
       navigate('/recommendations');
     } catch (error) {
       console.error('Login error:', error);
