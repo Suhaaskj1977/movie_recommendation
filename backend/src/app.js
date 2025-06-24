@@ -1,3 +1,4 @@
+// Load environment variables from .env file before anything else
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -8,22 +9,31 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const recommendationRoutes = require('./routes/recommendations');
 const { apiLimiter } = require('./middleware/auth');
+const { errorHandler, notFoundHandler } = require('./middleware/error');
 
 const app = express();
 
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://yourdomain.com', 'https://www.yourdomain.com']
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
-  credentials: true,
-  optionsSuccessStatus: 200
-};
+// CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  process.env.FRONTEND_URL // This will be your Vercel URL in production
+];
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg));
+    }
+    return callback(null, true);
+  }
+}));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -148,7 +158,7 @@ const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 CORS origins: ${corsOptions.origin.join(', ')}`);
+  console.log(`🔗 CORS origins: ${allowedOrigins.join(', ')}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth`);
   console.log(`🎬 Recommendation endpoints: http://localhost:${PORT}/api/recommendations`);
