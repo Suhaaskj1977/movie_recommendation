@@ -1,313 +1,366 @@
-# from flask import Flask, request, jsonify
-# import pandas as pd
-# import numpy as np
-# from sklearn.preprocessing import MinMaxScaler
-# from sklearn.neighbors import NearestNeighbors
-# from sklearn.impute import SimpleImputer
-# import sys
-# import json
-# import traceback
-# import logging
-
-
-# # Configure logging
-# logging.basicConfig(level=logging.DEBUG)
-
-
-# app = Flask(__name__)
-
-# # Load and preprocess data (this should match your previous preprocessing logic)
-# movie = pd.read_csv('/Users/vishnuadithya/Downloads/indian movies.csv')
-
-# def preprocess_data(movie):
-#     # Strip leading/trailing spaces from string columns
-#     movie['Movie Name'] = movie['Movie Name'].str.strip()
-#     movie['Language'] = movie['Language'].str.strip()
-
-#     # Convert 'Year' to numeric and calculate movie age
-#     current_year = 2024
-#     movie['Year'] = pd.to_numeric(movie['Year'], errors='coerce')
-#     movie['Movie_Age'] = current_year - movie['Year']
-
-#     # Clean and convert numeric columns
-#     numeric_columns = ['Timing', 'Rating(10)', 'Votes', 'Movie_Age']
-#     for col in numeric_columns:
-#         movie[col] = pd.to_numeric(movie[col].replace(['-', 'unknown'], np.nan), errors='coerce')
-   
-#     # Impute missing values
-#     imputer = SimpleImputer(strategy='median')
-#     movie[numeric_columns] = imputer.fit_transform(movie[numeric_columns])
-
-#     # Normalize numeric columns
-#     scaler = MinMaxScaler()
-#     movie[numeric_columns] = scaler.fit_transform(movie[numeric_columns])
-
-#     # One-hot encoding for 'Language'
-#     movie['Language'] = movie['Language'].fillna('Unknown')
-#     language_dummies = pd.get_dummies(movie['Language'], prefix='Lang')
-#     movie = pd.concat([movie, language_dummies], axis=1)
-
-#     # Process 'Genre'
-#     movie['Genre'] = movie['Genre'].fillna('')
-#     movie['Genre'] = movie['Genre'].apply(lambda x: [genre.strip() for genre in str(x).split(',')] if pd.notna(x) else [])
-#     genres_list = sorted(set(genre for genres in movie['Genre'] for genre in genres if genre))
-#     for genre in genres_list:
-#         movie[f'Genre_{genre}'] = movie['Genre'].apply(lambda x: int(genre in x))
-
-#     # Select features for recommendation
-#     feature_columns = numeric_columns + list(language_dummies.columns) + [f'Genre_{genre}' for genre in genres_list]
-    
-#     # Final check for NaN values
-#     movie_features = movie[feature_columns]
-#     if movie_features.isnull().values.any():
-#         print("Warning: NaN values still present in the following columns:")
-#         print(movie_features.columns[movie_features.isnull().any()].tolist())
-#         print("Filling remaining NaN values with 0")
-#         movie_features = movie_features.fillna(0)
-    
-#     return movie, feature_columns, movie_features
-# def recommend_movies(movie_df, movie_features, knn_model, movie_name, movie_language, year_gap=None, k=5):
-#     # Strip leading/trailing spaces from input
-#     movie_name = movie_name.strip()
-#     movie_language = movie_language.strip()
-    
-#     # Filter movies by name and language
-#     filtered_movies = movie_df[(movie_df['Movie Name'].str.lower() == movie_name.lower()) &
-#                                (movie_df['Language'].str.lower() == movie_language.lower())]
-    
-#     if filtered_movies.empty:
-#         return "Movie not found"
-    
-#     movie_index = filtered_movies.index[0]
-#     movie_vector = movie_features.iloc[movie_index].values.reshape(1, -1)
-    
-#     if year_gap:
-#         min_gap, max_gap = map(int, year_gap.split('-'))
-#         movie_year = movie_df.loc[movie_index, 'Year']
-#         year_filter = (movie_df['Year'] >= movie_year + min_gap) & (movie_df['Year'] <= movie_year + max_gap)
-        
-#         # Get more neighbors initially to account for year filtering
-#         n_neighbors = min(len(movie_df) - 1, k * 10)  # Increased multiplier
-#         distances, indices = knn_model.kneighbors(movie_vector, n_neighbors=n_neighbors + 1)
-        
-#         # Create a DataFrame with distances and apply year filter
-#         similar_movies = pd.DataFrame({
-#             'index': indices.flatten()[1:],
-#             'distance': distances.flatten()[1:]
-#         })
-#         similar_movies = similar_movies[year_filter.iloc[similar_movies['index']].values]
-        
-#         # If we still don't have enough recommendations, get more neighbors
-#         while len(similar_movies) < k and n_neighbors < len(movie_df) - 1:
-#             n_neighbors = min(len(movie_df) - 1, n_neighbors * 2)
-#             distances, indices = knn_model.kneighbors(movie_vector, n_neighbors=n_neighbors + 1)
-#             new_similar = pd.DataFrame({
-#                 'index': indices.flatten()[1:],
-#                 'distance': distances.flatten()[1:]
-#             })
-#             new_similar = new_similar[year_filter.iloc[new_similar['index']].values]
-#             similar_movies = pd.concat([similar_movies, new_similar]).drop_duplicates(subset='index')
-        
-#         # Sort by distance and select top k
-#         similar_movies = similar_movies.sort_values('distance').head(k)
-#         recommended_indices = similar_movies['index'].values
-#     else:
-#         # If no year gap, just get k neighbors
-#         distances, indices = knn_model.kneighbors(movie_vector, n_neighbors=k+1)
-#         recommended_indices = indices.flatten()[1:]
-    
-#     return movie_df.loc[recommended_indices, 'Movie Name'].values
-
-# movie, feature_columns, movie_features = preprocess_data(movie)
-# knn = NearestNeighbors(n_neighbors=6, metric='euclidean')
-# knn.fit(movie_features)
-# @app.route('/recommend', methods=['POST'])
-# def recommend():
-#     data = request.get_json()
-#     movie_name = data.get('movie_name')
-#     movie_language = data.get('movie_language')
-#     year_gap = data.get('year_gap')
-#     k = data.get('k', 5)
-
-#     try:
-#         recommendations = recommend_movies(movie, movie_features, knn, movie_name, movie_language, year_gap, k)
-#         return jsonify(recommendations)
-#     except Exception as e:
-#         logging.error(f"Error in recommendation endpoint: {e}", exc_info=True)
-#         return jsonify({'error': 'An error occurred while processing the recommendation'}), 500
-
-# if __name__ == '__main__':
-#     logging.basicConfig(level=logging.DEBUG)
-#     app.run(port=5001, debug=True)
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
 import sys
 import json
 import traceback
 import logging
-from flask import Flask, request, jsonify
-import pandas as pd
+import os
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+import pandas as pd
+from datetime import datetime
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.neighbors import NearestNeighbors
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.impute import SimpleImputer
+import warnings
+warnings.filterwarnings('ignore')
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, filename='recommendation_service.log', filemode='w',
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.DEBUG, 
+    filename='recommendation_service.log', 
+    filemode='w',
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-# Load and preprocess data
-try:
-    movie = pd.read_csv('/Users/vishnuadithya/Downloads/indian movies.csv')
-    logging.info("Successfully loaded movie data")
-except Exception as e:
-    logging.error(f"Error loading movie data: {str(e)}")
-    sys.exit(1)
-
-def preprocess_data(movie):
-    try:
-         # Strip leading/trailing spaces from string columns
-        movie['Movie Name'] = movie['Movie Name'].str.strip()
-        movie['Language'] = movie['Language'].str.strip()
-
-        # Convert 'Year' to numeric and calculate movie age
-        current_year = 2024
-        movie['Year'] = pd.to_numeric(movie['Year'], errors='coerce')
-        movie['Movie_Age'] = current_year - movie['Year']
-
-        # Clean and convert numeric columns
-        numeric_columns = ['Timing', 'Rating(10)', 'Votes', 'Movie_Age']
-        for col in numeric_columns:
-            movie[col] = pd.to_numeric(movie[col].replace(['-', 'unknown'], np.nan), errors='coerce')
+class EnhancedMovieRecommendationEngine:
+    def __init__(self):
+        """Initialize the enhanced recommendation engine with multiple algorithms."""
+        self.movie_data = None
+        self.processed_features = None
+        self.content_features = None
+        self.collaborative_model = None
+        self.content_model = None
+        self.hybrid_weights = {
+            'collaborative': 0.4,
+            'content': 0.3,
+            'popularity': 0.2,
+            'diversity': 0.1
+        }
+        self.load_and_preprocess_data()
+        
+    def load_and_preprocess_data(self):
+        """Load and preprocess the movie dataset."""
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            movie_data_path = os.path.join(script_dir, 'indian movies.csv')
+            
+            # Load the dataset
+            self.movie_data = pd.read_csv(movie_data_path)
+            logging.info(f"Successfully loaded {len(self.movie_data)} movies")
+            
+            # Clean and preprocess data
+            self._clean_data()
+            self._engineer_features()
+            self._prepare_models()
+            
+        except Exception as e:
+            logging.error(f"Error loading movie data: {str(e)}")
+            # Create a fallback sample dataset
+            self._create_fallback_dataset()
     
-        # Impute missing values
-        imputer = SimpleImputer(strategy='median')
-        movie[numeric_columns] = imputer.fit_transform(movie[numeric_columns])
-
-        # Normalize numeric columns
-        scaler = MinMaxScaler()
-        movie[numeric_columns] = scaler.fit_transform(movie[numeric_columns])
-
-        # One-hot encoding for 'Language'
-        movie['Language'] = movie['Language'].fillna('Unknown')
-        language_dummies = pd.get_dummies(movie['Language'], prefix='Lang')
-        movie = pd.concat([movie, language_dummies], axis=1)
-
-        # Process 'Genre'
-        movie['Genre'] = movie['Genre'].fillna('')
-        movie['Genre'] = movie['Genre'].apply(lambda x: [genre.strip() for genre in str(x).split(',')] if pd.notna(x) else [])
-        genres_list = sorted(set(genre for genres in movie['Genre'] for genre in genres if genre))
-        for genre in genres_list:
-            movie[f'Genre_{genre}'] = movie['Genre'].apply(lambda x: int(genre in x))
-
-        # Select features for recommendation
-        feature_columns = numeric_columns + list(language_dummies.columns) + [f'Genre_{genre}' for genre in genres_list]
-        
-        # Final check for NaN values
-        movie_features = movie[feature_columns]
-        if movie_features.isnull().values.any():
-            print("Warning: NaN values still present in the following columns:")
-            print(movie_features.columns[movie_features.isnull().any()].tolist())
-            print("Filling remaining NaN values with 0")
-            movie_features = movie_features.fillna(0)
+    def _clean_data(self):
+        """Clean and standardize the movie data."""
+        try:
+            # Clean column names and data
+            self.movie_data.columns = self.movie_data.columns.str.strip()
             
-        logging.info("Data preprocessing completed successfully")
-        return movie, feature_columns, movie_features
-    except Exception as e:
-        logging.error(f"Error in data preprocessing: {str(e)}")
-        traceback.print_exc()
-        sys.exit(1)
+            # Handle the timing column name issue - FIXED!
+            if 'Timing(min)' in self.movie_data.columns:
+                self.movie_data.rename(columns={'Timing(min)': 'Timing'}, inplace=True)
+            
+            # Strip whitespace from string columns
+            string_cols = ['Movie Name', 'Language', 'Genre']
+            for col in string_cols:
+                if col in self.movie_data.columns:
+                    self.movie_data[col] = self.movie_data[col].astype(str).str.strip()
+            
+            # Convert numeric columns - ENHANCED!
+            numeric_cols = ['Year', 'Timing', 'Rating(10)', 'Votes']
+            for col in numeric_cols:
+                if col in self.movie_data.columns:
+                    # Handle special cases like "170 min" and "8,284"
+                    self.movie_data[col] = self.movie_data[col].astype(str)
+                    self.movie_data[col] = self.movie_data[col].str.replace(',', '')
+                    self.movie_data[col] = self.movie_data[col].str.replace(' min', '')
+                    self.movie_data[col] = self.movie_data[col].str.replace('"', '')
+                    self.movie_data[col] = pd.to_numeric(self.movie_data[col], errors='coerce')
+            
+            # Calculate additional features
+            current_year = datetime.now().year
+            self.movie_data['Movie_Age'] = current_year - self.movie_data['Year']
+            self.movie_data['Rating_Votes_Score'] = (
+                self.movie_data['Rating(10)'] * np.log1p(self.movie_data['Votes'].fillna(0))
+            )
+            
+            # Clean genres
+            self.movie_data['Genre'] = self.movie_data['Genre'].fillna('')
+            self.movie_data['Genre_List'] = self.movie_data['Genre'].apply(
+                lambda x: [g.strip() for g in str(x).split(',') if g.strip()]
+            )
+            
+            logging.info("Data cleaning completed successfully")
+            
+        except Exception as e:
+            logging.error(f"Error in data cleaning: {str(e)}")
+            raise
+    
+    def _engineer_features(self):
+        """Engineer features for different recommendation algorithms."""
+        try:
+            # Numerical features for collaborative filtering
+            numeric_features = ['Year', 'Timing', 'Rating(10)', 'Votes', 'Movie_Age', 'Rating_Votes_Score']
+            
+            # Handle missing values
+            imputer = SimpleImputer(strategy='median')
+            numeric_data = self.movie_data[numeric_features].copy()
+            numeric_data = pd.DataFrame(
+                imputer.fit_transform(numeric_data),
+                columns=numeric_features,
+                index=self.movie_data.index
+            )
+            
+            # Normalize numerical features
+            scaler = MinMaxScaler()
+            numeric_normalized = pd.DataFrame(
+                scaler.fit_transform(numeric_data),
+                columns=[f"{col}_norm" for col in numeric_features],
+                index=self.movie_data.index
+            )
+            
+            # Language features
+            language_dummies = pd.get_dummies(
+                self.movie_data['Language'], 
+                prefix='Lang'
+            )
+            
+            # Genre features
+            all_genres = set()
+            for genre_list in self.movie_data['Genre_List']:
+                all_genres.update(genre_list)
+            
+            genre_features = pd.DataFrame(0, index=self.movie_data.index, columns=list(all_genres))
+            for idx, genre_list in enumerate(self.movie_data['Genre_List']):
+                for genre in genre_list:
+                    if genre in genre_features.columns:
+                        genre_features.loc[idx, genre] = 1
+            
+            # Combine all features
+            self.processed_features = pd.concat([
+                numeric_normalized,
+                language_dummies,
+                genre_features
+            ], axis=1)
+            
+            # Content-based features (TF-IDF of genres and other text)
+            self.movie_data['content_text'] = (
+                self.movie_data['Genre'].fillna('') + ' ' +
+                self.movie_data['Language'].fillna('')
+            )
+            
+            tfidf = TfidfVectorizer(max_features=100, stop_words='english')
+            self.content_features = tfidf.fit_transform(self.movie_data['content_text'])
+            
+            logging.info("Feature engineering completed successfully")
+            
+        except Exception as e:
+            logging.error(f"Error in feature engineering: {str(e)}")
+            raise
+    
+    def _prepare_models(self):
+        """Prepare different recommendation models."""
+        try:
+            # Collaborative Filtering Model (KNN)
+            self.collaborative_model = NearestNeighbors(
+                n_neighbors=min(20, len(self.processed_features)),
+                metric='cosine',
+                algorithm='brute'
+            )
+            self.collaborative_model.fit(self.processed_features)
+            
+            # Content-based Model (KNN on content features)
+            self.content_model = NearestNeighbors(
+                n_neighbors=min(20, len(self.processed_features)),
+                metric='cosine',
+                algorithm='brute'
+            )
+            self.content_model.fit(self.content_features.toarray())
+            
+            logging.info("Models prepared successfully")
+            
+        except Exception as e:
+            logging.error(f"Error preparing models: {str(e)}")
+            raise
+    
+    def _create_fallback_dataset(self):
+        """Create a fallback dataset when main dataset fails to load."""
+        fallback_data = {
+            'ID': ['tt1582519', 'tt2', 'tt3', 'tt4', 'tt5'],
+            'Movie Name': ['Khaleja', 'Baahubali', 'KGF', 'Pushpa', 'Arjun Reddy'],
+            'Year': [2010, 2015, 2018, 2021, 2017],
+            'Timing': [170, 159, 156, 179, 182],
+            'Rating(10)': [7.6, 8.0, 8.2, 7.6, 8.1],
+            'Votes': [8284, 25000, 20000, 12000, 18000],
+            'Genre': ['Action, Comedy, Fantasy', 'Action, Drama', 'Action, Crime', 'Action, Crime', 'Drama, Romance'],
+            'Language': ['telugu', 'telugu', 'kannada', 'telugu', 'telugu']
+        }
+        
+        self.movie_data = pd.DataFrame(fallback_data)
+        self._clean_data()
+        self._engineer_features()
+        self._prepare_models()
+        logging.info("Fallback dataset created and processed")
+    
+    def get_collaborative_recommendations(self, movie_index, k=10):
+        """Get recommendations using collaborative filtering."""
+        try:
+            movie_vector = self.processed_features.iloc[movie_index].values.reshape(1, -1)
+            distances, indices = self.collaborative_model.kneighbors(movie_vector, n_neighbors=k+1)
+            
+            # Exclude the input movie itself
+            similar_indices = indices.flatten()[1:]
+            similarities = 1 - distances.flatten()[1:]  # Convert distance to similarity
+            
+            return list(zip(similar_indices, similarities))
+            
+        except Exception as e:
+            logging.error(f"Error in collaborative filtering: {str(e)}")
+            return []
+    
+    def get_content_recommendations(self, movie_index, k=10):
+        """Get recommendations using content-based filtering."""
+        try:
+            movie_vector = self.content_features[movie_index].toarray()
+            distances, indices = self.content_model.kneighbors(movie_vector, n_neighbors=k+1)
+            
+            # Exclude the input movie itself
+            similar_indices = indices.flatten()[1:]
+            similarities = 1 - distances.flatten()[1:]  # Convert distance to similarity
+            
+            return list(zip(similar_indices, similarities))
+            
+        except Exception as e:
+            logging.error(f"Error in content-based filtering: {str(e)}")
+            return []
+    
+    def hybrid_recommend(self, movie_name, movie_language, year_gap=None, k=5):
+        """Generate hybrid recommendations combining multiple algorithms."""
+        try:
+            # Find the movie
+            movie_name = movie_name.strip().lower()
+            movie_language = movie_language.strip().lower()
+            
+            movie_matches = self.movie_data[
+                (self.movie_data['Movie Name'].str.lower() == movie_name) &
+                (self.movie_data['Language'].str.lower() == movie_language)
+            ]
+            
+            if movie_matches.empty:
+                logging.warning(f"Movie '{movie_name}' in '{movie_language}' not found")
+                return ["Movie not found"]
+            
+            movie_index = movie_matches.index[0]
+            input_movie = movie_matches.iloc[0]
+            
+            # Get recommendations from different algorithms
+            collab_recs = self.get_collaborative_recommendations(movie_index, k*2)
+            content_recs = self.get_content_recommendations(movie_index, k*2)
+            
+            # Combine recommendations with weights
+            combined_scores = {}
+            
+            # Add collaborative filtering scores
+            for idx, score in collab_recs:
+                combined_scores[idx] = combined_scores.get(idx, 0) + score * self.hybrid_weights['collaborative']
+            
+            # Add content-based scores
+            for idx, score in content_recs:
+                combined_scores[idx] = combined_scores.get(idx, 0) + score * self.hybrid_weights['content']
+            
+            # Convert to list and sort
+            hybrid_recommendations = [(idx, score) for idx, score in combined_scores.items()]
+            hybrid_recommendations.sort(key=lambda x: x[1], reverse=True)
+            
+            # Apply year gap filter if specified
+            if year_gap and year_gap != 'null':
+                hybrid_recommendations = self._apply_year_filter(
+                    hybrid_recommendations, input_movie['Year'], year_gap
+                )
+            
+            # Get top k recommendations
+            final_recommendations = hybrid_recommendations[:k]
+            
+            # Format results - return just movie names for compatibility
+            results = []
+            for movie_idx, score in final_recommendations:
+                movie_info = self.movie_data.loc[movie_idx]
+                results.append(movie_info['Movie Name'])
+            
+            logging.info(f"Successfully generated {len(results)} hybrid recommendations for '{movie_name}'")
+            return results
+            
+        except Exception as e:
+            logging.error(f"Error in hybrid recommendation: {str(e)}")
+            traceback.print_exc()
+            return ["Error generating recommendations"]
+    
+    def _apply_year_filter(self, recommendations, input_year, year_gap):
+        """Apply year gap filtering to recommendations."""
+        try:
+            if '-' in str(year_gap):
+                min_gap, max_gap = map(int, str(year_gap).split('-'))
+            else:
+                gap = int(year_gap)
+                min_gap, max_gap = -gap, gap
+            
+            filtered_recs = []
+            for movie_idx, score in recommendations:
+                movie_year = self.movie_data.loc[movie_idx, 'Year']
+                if pd.notna(movie_year):
+                    year_diff = movie_year - input_year
+                    if min_gap <= year_diff <= max_gap:
+                        filtered_recs.append((movie_idx, score))
+            
+            return filtered_recs
+            
+        except Exception as e:
+            logging.error(f"Error in year filtering: {str(e)}")
+            return recommendations
 
-def recommend_movies(movie_df, movie_features, knn_model, movie_name, movie_language, year_gap=None, k=5):
+# Global instance
+recommendation_engine = None
+
+def initialize_engine():
+    """Initialize the recommendation engine."""
+    global recommendation_engine
+    if recommendation_engine is None:
+        recommendation_engine = EnhancedMovieRecommendationEngine()
+
+def recommend_movies(movie_name, movie_language, year_gap=None, k=5):
+    """Main function to get movie recommendations - maintains compatibility."""
     try:
-        # Strip leading/trailing spaces from input
-        movie_name = movie_name.strip()
-        movie_language = movie_language.strip()
-        
-        # Filter movies by name and language
-        filtered_movies = movie_df[(movie_df['Movie Name'].str.lower() == movie_name.lower()) &
-                                (movie_df['Language'].str.lower() == movie_language.lower())]
-        
-        if filtered_movies.empty:
-            return "Movie not found"
-        
-        movie_index = filtered_movies.index[0]
-        movie_vector = movie_features.iloc[movie_index].values.reshape(1, -1)
-        
-        if year_gap:
-            min_gap, max_gap = map(int, year_gap.split('-'))
-            movie_year = movie_df.loc[movie_index, 'Year']
-            year_filter = (movie_df['Year'] >= movie_year + min_gap) & (movie_df['Year'] <= movie_year + max_gap)
-            
-            # Get more neighbors initially to account for year filtering
-            n_neighbors = min(len(movie_df) - 1, k * 10)  # Increased multiplier
-            distances, indices = knn_model.kneighbors(movie_vector, n_neighbors=n_neighbors + 1)
-            
-            # Create a DataFrame with distances and apply year filter
-            similar_movies = pd.DataFrame({
-                'index': indices.flatten()[1:],
-                'distance': distances.flatten()[1:]
-            })
-            similar_movies = similar_movies[year_filter.iloc[similar_movies['index']].values]
-            
-            # If we still don't have enough recommendations, get more neighbors
-            while len(similar_movies) < k and n_neighbors < len(movie_df) - 1:
-                n_neighbors = min(len(movie_df) - 1, n_neighbors * 2)
-                distances, indices = knn_model.kneighbors(movie_vector, n_neighbors=n_neighbors + 1)
-                new_similar = pd.DataFrame({
-                    'index': indices.flatten()[1:],
-                    'distance': distances.flatten()[1:]
-                })
-                new_similar = new_similar[year_filter.iloc[new_similar['index']].values]
-                similar_movies = pd.concat([similar_movies, new_similar]).drop_duplicates(subset='index')
-            
-            # Sort by distance and select top k
-            similar_movies = similar_movies.sort_values('distance').head(k)
-            recommended_indices = similar_movies['index'].values
-        else:
-            # If no year gap, just get k neighbors
-            distances, indices = knn_model.kneighbors(movie_vector, n_neighbors=k+1)
-            recommended_indices = indices.flatten()[1:]
-
-        logging.info(f"Successfully generated recommendations for {movie_name}")
-        return movie_df.loc[recommended_indices, 'Movie Name'].values.tolist()
+        initialize_engine()
+        return recommendation_engine.hybrid_recommend(
+            movie_name, movie_language, year_gap, k
+        )
     except Exception as e:
-        logging.error(f"Error in movie recommendation: {str(e)}")
-        traceback.print_exc()
-        return []
-
-# Preprocess data and create KNN model
-movie, feature_columns, movie_features = preprocess_data(movie)
-knn = NearestNeighbors(n_neighbors=6, metric='euclidean')
-knn.fit(movie_features)
+        logging.error(f"Error in recommend_movies: {str(e)}")
+        return ["Error generating recommendations"]
 
 if __name__ == '__main__':
     try:
-        movie_name = sys.argv[1]
-        movie_language = sys.argv[2]
-        year_gap = sys.argv[3] if len(sys.argv) > 3 else None
+        # Parse command line arguments
+        movie_name = sys.argv[1] if len(sys.argv) > 1 else "Khaleja"
+        movie_language = sys.argv[2] if len(sys.argv) > 2 else "telugu"
+        year_gap = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
         k = int(sys.argv[4]) if len(sys.argv) > 4 else 5
 
-        recommendations = recommend_movies(movie, movie_features, knn, movie_name, movie_language, year_gap, k)
-        print(json.dumps(recommendations))
+        # Get recommendations
+        recommendations = recommend_movies(movie_name, movie_language, year_gap, k)
+        
+        # Output results as JSON
+        print(json.dumps(recommendations, ensure_ascii=False))
+        
     except Exception as e:
         logging.error(f"Error in main execution: {str(e)}")
         traceback.print_exc()

@@ -1,24 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { recommendationService } from '../services/api';
-import DNA from './DNA';
-
-const Navbar = () => (
-  <nav className="bg-[#1A120B] p-4">
-    <div className="container mx-auto flex justify-between items-center">
-      <h1 className="text-[#E5E5CB] text-2xl font-bold">CineGenome</h1>
-      <button className="text-[#E5E5CB] hover:text-[#D5CEA3]">Login</button>
-    </div>
-  </nav>
-);
-
-const MovieCard = ({ movie }) => (
-  <div className="bg-[#3C2A21] p-4 rounded-lg shadow-lg">
-    {movie.Poster && movie.Poster !== 'N/A' && (
-      <img src={movie.Poster} alt={`${movie.Title} poster`} className="mb-4 rounded" />
-    )}
-    <h3 className="text-[#E5E5CB] text-xl font-semibold">{movie.Title}</h3>
-  </div>
-);
 
 const MovieRecommendations = () => {
   const [showForm, setShowForm] = useState(true);
@@ -28,109 +10,259 @@ const MovieRecommendations = () => {
   const [k, setK] = useState(5);
   const [recommendations, setRecommendations] = useState([]);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setRecommendations([]);
+    setIsLoading(true);
 
     try {
       const result = await recommendationService.getRecommendations(movieName, movieLanguage, yearGap, k);
       const moviesWithPosters = await Promise.all(result.map(async (movie) => {
-        const movieDetails = await recommendationService.getMovieDetails(movie);
-        return { ...movie, Poster: movieDetails.Poster };
+        try {
+          const movieDetails = await recommendationService.getMovieDetails(movie);
+          // Original script returns names, so we create an object
+          return { Title: movie, Poster: movieDetails.Poster };
+        } catch {
+          return { Title: movie, Poster: null };
+        }
       }));
       setRecommendations(moviesWithPosters);
       setShowForm(false);
     } catch (err) {
       setError('Failed to get recommendations. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen font-sans bg-[#E5E5CB]">
-      <Navbar />
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-[calc(100vh-64px)] p-4">
-        <div className="absolute inset-0 z-0 opacity-30">
-          <DNA />
+  const MovieCard = ({ movie, index }) => (
+    <motion.div
+      className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-all duration-300"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      whileHover={{ y: -5 }}
+    >
+      {movie.Poster && movie.Poster !== 'N/A' ? (
+        <div className="aspect-[2/3] overflow-hidden">
+          <img 
+            src={movie.Poster} 
+            alt={`${movie.Title} poster`} 
+            className="w-full h-full object-cover"
+          />
         </div>
-        {showForm ? (
-          <div className="w-full max-w-2xl bg-[#D5CEA3] p-8 rounded-lg shadow-xl relative z-10">
-            <h2 className="text-4xl font-bold mb-8 text-[#1A120B] text-center">
-              Discover Your Movie DNA
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="movieName" className="block text-[#1A120B] mb-2 font-semibold">Movie Name</label>
-                <input
-                  id="movieName"
-                  type="text"
-                  value={movieName}
-                  onChange={(e) => setMovieName(e.target.value)}
-                  required
-                  className="w-full p-3 border border-[#3C2A21] rounded-lg focus:ring-2 focus:ring-[#1A120B] focus:border-[#1A120B] bg-[#E5E5CB] text-[#1A120B]"
-                  placeholder="Enter movie name"
-                />
-              </div>
-              <div>
-                <label htmlFor="movieLanguage" className="block text-[#1A120B] mb-2 font-semibold">Movie Language</label>
-                <input
-                  id="movieLanguage"
-                  type="text"
-                  value={movieLanguage}
-                  onChange={(e) => setMovieLanguage(e.target.value)}
-                  required
-                  className="w-full p-3 border border-[#3C2A21] rounded-lg focus:ring-2 focus:ring-[#1A120B] focus:border-[#1A120B] bg-[#E5E5CB] text-[#1A120B]"
-                  placeholder="Enter movie language"
-                />
-              </div>
-              <div>
-                <label htmlFor="yearGap" className="block text-[#1A120B] mb-2 font-semibold">Year Gap</label>
-                <input
-                  id="yearGap"
-                  type="text"
-                  value={yearGap}
-                  onChange={(e) => setYearGap(e.target.value)}
-                  className="w-full p-3 border border-[#3C2A21] rounded-lg focus:ring-2 focus:ring-[#1A120B] focus:border-[#1A120B] bg-[#E5E5CB] text-[#1A120B]"
-                  placeholder="e.g., '0-5'"
-                />
-              </div>
-              <div>
-                <label htmlFor="k" className="block text-[#1A120B] mb-2 font-semibold">Number of Recommendations</label>
-                <select
-                  id="k"
-                  value={k}
-                  onChange={(e) => setK(Number(e.target.value))}
-                  className="w-full p-3 border border-[#3C2A21] rounded-lg focus:ring-2 focus:ring-[#1A120B] focus:border-[#1A120B] bg-[#E5E5CB] text-[#1A120B]"
-                >
-                  {[5, 10, 15, 20].map((num) => (
-                    <option key={num} value={num}>{num}</option>
-                  ))}
-                </select>
-              </div>
-              <button type="submit" className="w-full bg-[#3C2A21] text-[#E5E5CB] py-3 px-6 rounded-lg text-xl hover:bg-[#1A120B] transition-colors duration-300 shadow-lg">
-                Get Recommendations
-              </button>
-            </form>
-
-            {error && <p className="text-red-500 mt-4">{error}</p>}
-          </div>
-        ) : (
-          <div className="w-full max-w-4xl bg-[#D5CEA3] p-8 rounded-lg shadow-xl relative z-10">
-            <h2 className="text-3xl font-bold mb-6 text-[#1A120B] text-center">Recommended Movies</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recommendations.map((movie, index) => (
-                <MovieCard key={index} movie={movie} />
-              ))}
-            </div>
-            <button 
-              onClick={() => setShowForm(true)} 
-              className="mt-8 bg-[#3C2A21] text-[#E5E5CB] py-2 px-4 rounded-lg hover:bg-[#1A120B] transition-colors duration-300 shadow-lg"
-            >
-              Back to Search
-            </button>
-          </div>
+      ) : (
+        <div className="aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+          <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2M7 4h10M7 4l-2 14a2 2 0 002 2h10a2 2 0 002-2L17 4M9 10v4M15 10v4" />
+          </svg>
+        </div>
+      )}
+      <div className="p-4">
+        <h3 className="font-semibold text-gray-900 text-lg mb-1 line-clamp-2">{movie.Title}</h3>
+        {movie.Year && (
+          <p className="text-gray-500 text-sm">{movie.Year}</p>
         )}
+        {movie.Genre && (
+          <p className="text-gray-600 text-sm mt-1 line-clamp-1">{movie.Genre}</p>
+        )}
+      </div>
+    </motion.div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <AnimatePresence mode="wait">
+          {showForm ? (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.5 }}
+              className="max-w-2xl mx-auto"
+            >
+              {/* Header */}
+              <div className="text-center mb-12">
+                <motion.h1 
+                  className="text-4xl md:text-5xl font-bold text-gray-900 mb-4"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  Discover Movies
+                </motion.h1>
+                <motion.p 
+                  className="text-xl text-gray-600 max-w-lg mx-auto"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  Tell us about a movie you love, and we'll find similar films you'll enjoy
+                </motion.p>
+              </div>
+
+              {/* Form */}
+              <motion.div
+                className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+              >
+                {/* Error Message */}
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm"
+                  >
+                    {error}
+                  </motion.div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Movie Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Movie Title
+                    </label>
+                    <input
+                      type="text"
+                      value={movieName}
+                      onChange={(e) => setMovieName(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
+                      placeholder="e.g., The Dark Knight, Inception, Pulp Fiction"
+                    />
+                  </div>
+
+                  {/* Movie Language */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Language
+                    </label>
+                    <input
+                      type="text"
+                      value={movieLanguage}
+                      onChange={(e) => setMovieLanguage(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
+                      placeholder="e.g., English, Spanish, French"
+                    />
+                  </div>
+
+                  {/* Year Gap */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Year Range (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={yearGap}
+                      onChange={(e) => setYearGap(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
+                      placeholder="e.g., 2010-2020 or leave blank for all years"
+                    />
+                  </div>
+
+                  {/* Number of Recommendations */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Number of Recommendations
+                    </label>
+                    <select
+                      value={k}
+                      onChange={(e) => setK(Number(e.target.value))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-gray-50 focus:bg-white"
+                    >
+                      {[5, 10, 15, 20].map((num) => (
+                        <option key={num} value={num}>
+                          {num} movies
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Submit Button */}
+                  <motion.button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-gray-900 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    whileHover={{ scale: isLoading ? 1 : 1.02 }}
+                    whileTap={{ scale: isLoading ? 1 : 0.98 }}
+                  >
+                    {isLoading ? (
+                      <div className="flex items-center justify-center space-x-3">
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Finding recommendations...</span>
+                      </div>
+                    ) : (
+                      'Get Recommendations'
+                    )}
+                  </motion.button>
+                </form>
+              </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.5 }}
+            >
+              {/* Results Header */}
+              <div className="text-center mb-12">
+                <motion.h1 
+                  className="text-4xl md:text-5xl font-bold text-gray-900 mb-4"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  Recommended for You
+                </motion.h1>
+                <motion.p 
+                  className="text-xl text-gray-600"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  Based on "{movieName}" • {recommendations.length} movies found
+                </motion.p>
+              </div>
+
+              {/* Movies Grid */}
+              <motion.div 
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-12"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                {recommendations.map((movie, index) => (
+                  <MovieCard key={index} movie={movie} index={index} />
+                ))}
+              </motion.div>
+
+              {/* Back Button */}
+              <div className="text-center">
+                <motion.button 
+                  onClick={() => setShowForm(true)}
+                  className="bg-white text-gray-900 py-3 px-8 rounded-xl font-semibold border-2 border-gray-900 hover:bg-gray-900 hover:text-white transition-all duration-300 shadow-lg"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  Search Again
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

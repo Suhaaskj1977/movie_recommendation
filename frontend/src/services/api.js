@@ -66,5 +66,13 @@ const recommendationService = {
         throw error;
       }
     },
-  };
+
+    getMovieDetails: async (movie) => {
+      // For now, return a placeholder poster
+      // In a real app, you'd call an external API like OMDB or TMDB
+      return {
+        Poster: 'https://via.placeholder.com/300x450/cccccc/666666?text=Movie+Poster'
+      };
+    },
+};
   export { api, authService, recommendationService };

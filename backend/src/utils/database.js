@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const uri = "mongodb+srv://manasgun10:manasgun10@movies.ecn5kku.mongodb.net/";
+const uri = "mongodb+srv://Vishnu:Vishnu234@harmoney-cluster.tdgmi.mongodb.net/?retryWrites=true&w=majority&appName=Harmoney-cluster";
 
 const connectDB = async () => {
   try {

@@ -1,2 +1,5 @@
-2024-07-23 22:41:08,929 - INFO - Successfully loaded movie data
-2024-07-23 22:41:09,607 - INFO - Data preprocessing completed successfully
+2025-06-25 02:24:27,955 - INFO - Successfully loaded 50602 movies
+2025-06-25 02:24:28,194 - INFO - Data cleaning completed successfully
+2025-06-25 02:24:30,086 - INFO - Feature engineering completed successfully
+2025-06-25 02:24:30,106 - INFO - Models prepared successfully
+2025-06-25 02:24:30,142 - INFO - Successfully generated 5 hybrid recommendations for 'khaleja'
