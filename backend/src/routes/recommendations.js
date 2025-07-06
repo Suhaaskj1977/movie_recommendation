@@ -16,7 +16,8 @@ const RecommendationHistory = require('../models/RecommendationHistory');
 
 // Use the enhanced recommendation service
 const PYTHON_SCRIPT_PATH = path.join(__dirname, '../services/enhanced_recommendation_service.py');
-const VENV_PYTHON_PATH = path.join(__dirname, '../../venv/bin/python');
+// Use global Python for cross-platform compatibility
+const VENV_PYTHON_PATH = process.platform === 'win32' ? 'python' : 'python3';
 
 // Helper function to run the Python script
 const runPythonScript = (args) => {

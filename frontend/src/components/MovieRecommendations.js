@@ -3,28 +3,122 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { recommendationService, api } from '../services/api';
 import Select from 'react-select';
 
+
+// --- Move SearchForm and DiscoverForm outside the main component ---
+function SearchForm({
+  movieName,
+  setMovieName,
+  yearGap,
+  setYearGap,
+  k,
+  setK,
+  handleSearchSubmit,
+  languageOptions,
+  handleLanguageSelect,
+  error,
+  isLoading
+}) {
+  return (
+    <form onSubmit={handleSearchSubmit} className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Movie Title</label>
+        <input type="text" value={movieName} onChange={(e) => setMovieName(e.target.value)} required className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="e.g., Baahubali, KGF"/>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Year Gap (Optional)</label>
+          <input type="text" value={yearGap} onChange={(e) => setYearGap(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="e.g., 2010-2020"/>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
+          <input type="number" value={k} onChange={(e) => setK(parseInt(e.target.value, 10))} min="1" max="20" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"/>
+        </div>
+      </div>
+      {/* Language Clarification */}
+      {languageOptions && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 bg-blue-50 rounded-lg">
+          <p className="text-sm text-blue-800 mb-3">{error}. Please choose one:</p>
+          <div className="flex flex-wrap gap-2">
+            {languageOptions.map((opt, i) => (
+              <button key={i} type="button" onClick={() => handleLanguageSelect(opt.Language)} className="px-3 py-1 bg-blue-500 text-white rounded-full text-sm hover:bg-blue-600">
+                {opt.Language} ({opt.Year})
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      )}
+      {error && !languageOptions && (
+        <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+      )}
+      <button type="submit" disabled={isLoading} className="w-full bg-gray-900 text-white py-3 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 disabled:opacity-50">
+        {isLoading ? 'Searching...' : 'Find Recommendations'}
+      </button>
+    </form>
+  );
+}
+
+function DiscoverForm({
+  allGenres,
+  discoverGenres,
+  setDiscoverGenres,
+  allLanguages,
+  discoverLanguages,
+  setDiscoverLanguages,
+  k,
+  setK,
+  handleDiscoverSubmit,
+  isLoading
+}) {
+  return (
+    <form onSubmit={handleDiscoverSubmit} className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Genres</label>
+        <Select
+          isMulti
+          options={allGenres}
+          value={discoverGenres}
+          onChange={setDiscoverGenres}
+          placeholder="Select one or more genres..."
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Languages</label>
+        <Select
+          isMulti
+          options={allLanguages}
+          value={discoverLanguages}
+          onChange={setDiscoverLanguages}
+          placeholder="Select one or more languages..."
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
+        <input type="number" value={k} onChange={(e) => setK(parseInt(e.target.value, 10))} min="1" max="20" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"/>
+      </div>
+      <button type="submit" disabled={isLoading} className="w-full bg-gray-900 text-white py-3 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 disabled:opacity-50">
+        {isLoading ? 'Searching...' : 'Discover Movies'}
+      </button>
+    </form>
+  );
+}
+
 const MovieRecommendations = () => {
   const [mode, setMode] = useState('search'); // 'search' or 'discover'
   const [showForm, setShowForm] = useState(true);
-  
   // Search Form State
   const [movieName, setMovieName] = useState('');
   const [yearGap, setYearGap] = useState('');
   const [k, setK] = useState(5);
-
   // Discover Form State
   const [discoverGenres, setDiscoverGenres] = useState([]);
-  const [discoverLanguages, setDiscoverLanguages] =useState([]);
-
+  const [discoverLanguages, setDiscoverLanguages] = useState([]);
   // General State
   const [recommendations, setRecommendations] = useState([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
   // Language Clarification State
   const [languageOptions, setLanguageOptions] = useState(null);
   const [pendingMovieName, setPendingMovieName] = useState('');
-
   // Data for selects
   const [allGenres, setAllGenres] = useState([]);
   const [allLanguages, setAllLanguages] = useState([]);
@@ -107,7 +201,7 @@ const MovieRecommendations = () => {
     setRecommendations([]);
     setError('');
     setLanguageOptions(null);
-  }
+  };
 
   const MovieCard = ({ movie, index }) => (
     <motion.div
@@ -134,117 +228,73 @@ const MovieRecommendations = () => {
     </motion.div>
   );
 
-  const SearchForm = () => (
-    <form onSubmit={handleSearchSubmit} className="space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Movie Title</label>
-        <input type="text" value={movieName} onChange={(e) => setMovieName(e.target.value)} required className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="e.g., Baahubali, KGF"/>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Year Gap (Optional)</label>
-          <input type="text" value={yearGap} onChange={(e) => setYearGap(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="e.g., 2010-2020"/>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
-          <input type="number" value={k} onChange={(e) => setK(parseInt(e.target.value, 10))} min="1" max="20" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"/>
-        </div>
-      </div>
-      {/* Language Clarification */}
-      {languageOptions && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 bg-blue-50 rounded-lg">
-          <p className="text-sm text-blue-800 mb-3">{error}. Please choose one:</p>
-          <div className="flex flex-wrap gap-2">
-            {languageOptions.map((opt, i) => (
-              <button key={i} type="button" onClick={() => handleLanguageSelect(opt.Language)} className="px-3 py-1 bg-blue-500 text-white rounded-full text-sm hover:bg-blue-600">
-                {opt.Language} ({opt.Year})
-              </button>
-            ))}
-          </div>
-        </motion.div>
-      )}
-      {error && !languageOptions && (
-        <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      )}
-      <motion.button type="submit" disabled={isLoading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full bg-gray-900 text-white py-3 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 disabled:opacity-50">
-        {isLoading ? 'Searching...' : 'Find Recommendations'}
-      </motion.button>
-    </form>
-  );
-
-  const DiscoverForm = () => (
-    <form onSubmit={handleDiscoverSubmit} className="space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Genres</label>
-        <Select
-          isMulti
-          options={allGenres}
-          value={discoverGenres}
-          onChange={setDiscoverGenres}
-          placeholder="Select one or more genres..."
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Languages</label>
-        <Select
-          isMulti
-          options={allLanguages}
-          value={discoverLanguages}
-          onChange={setDiscoverLanguages}
-          placeholder="Select one or more languages..."
-        />
-      </div>
-       <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
-          <input type="number" value={k} onChange={(e) => setK(parseInt(e.target.value, 10))} min="1" max="20" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"/>
-       </div>
-      <motion.button type="submit" disabled={isLoading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full bg-gray-900 text-white py-3 px-6 rounded-xl font-semibold text-lg hover:bg-gray-800 disabled:opacity-50">
-        {isLoading ? 'Searching...' : 'Discover Movies'}
-      </motion.button>
-    </form>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <AnimatePresence mode="wait">
-          {showForm ? (
-            <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-2xl mx-auto">
-              <div className="text-center mb-10">
-                <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-3">Movie Discovery</h1>
-                <p className="text-lg text-gray-600">Find your next favorite film, with or without a title in mind.</p>
-              </div>
+        {showForm ? (
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-10">
+              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-3">Movie Discovery</h1>
+              <p className="text-lg text-gray-600">Find your next favorite film, with or without a title in mind.</p>
+            </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-2 mb-8 flex space-x-2">
-                <button onClick={() => setMode('search')} className={`w-1/2 py-3 rounded-xl font-semibold ${mode === 'search' ? 'bg-gray-900 text-white' : 'bg-transparent text-gray-600'}`}>
-                  Search by Title
-                </button>
-                <button onClick={() => setMode('discover')} className={`w-1/2 py-3 rounded-xl font-semibold ${mode === 'discover' ? 'bg-gray-900 text-white' : 'bg-transparent text-gray-600'}`}>
-                  Discover by Filter
-                </button>
-              </div>
+            <div className="bg-white rounded-2xl shadow-lg p-2 mb-8 flex space-x-2">
+              <button onClick={() => setMode('search')} className={`w-1/2 py-3 rounded-xl font-semibold ${mode === 'search' ? 'bg-gray-900 text-white' : 'bg-transparent text-gray-600'}`}> 
+                Search by Title
+              </button>
+              <button onClick={() => setMode('discover')} className={`w-1/2 py-3 rounded-xl font-semibold ${mode === 'discover' ? 'bg-gray-900 text-white' : 'bg-transparent text-gray-600'}`}> 
+                Discover by Filter
+              </button>
+            </div>
 
-              <motion.div className="bg-white rounded-2xl shadow-lg p-8" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
-                {mode === 'search' ? <SearchForm /> : <DiscoverForm />}
-              </motion.div>
-            </motion.div>
-          ) : (
-            <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <div className="text-center mb-10">
-                <h1 className="text-4xl font-extrabold text-gray-900">Recommendations</h1>
-                <p className="text-lg text-gray-600 mt-2">Based on your love for "{pendingMovieName || movieName}"</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {recommendations.map((movie, index) => <MovieCard key={index} movie={movie} index={index} />)}
-              </div>
-              <div className="text-center mt-12">
-                <button onClick={resetSearch} className="bg-white text-gray-800 py-2 px-6 rounded-xl font-semibold border-2 border-gray-300 hover:bg-gray-100">
-                  Search Again
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            {/* Only animate the outer container, not the form itself, to prevent remounting the form and losing input focus */}
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              {mode === 'search' ? (
+                <SearchForm
+                  movieName={movieName}
+                  setMovieName={setMovieName}
+                  yearGap={yearGap}
+                  setYearGap={setYearGap}
+                  k={k}
+                  setK={setK}
+                  handleSearchSubmit={handleSearchSubmit}
+                  languageOptions={languageOptions}
+                  handleLanguageSelect={handleLanguageSelect}
+                  error={error}
+                  isLoading={isLoading}
+                />
+              ) : (
+                <DiscoverForm
+                  allGenres={allGenres}
+                  discoverGenres={discoverGenres}
+                  setDiscoverGenres={setDiscoverGenres}
+                  allLanguages={allLanguages}
+                  discoverLanguages={discoverLanguages}
+                  setDiscoverLanguages={setDiscoverLanguages}
+                  k={k}
+                  setK={setK}
+                  handleDiscoverSubmit={handleDiscoverSubmit}
+                  isLoading={isLoading}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-center mb-10">
+              <h1 className="text-4xl font-extrabold text-gray-900">Recommendations</h1>
+              <p className="text-lg text-gray-600 mt-2">Based on your love for "{pendingMovieName || movieName}"</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {recommendations.map((movie, index) => <MovieCard key={index} movie={movie} index={index} />)}
+            </div>
+            <div className="text-center mt-12">
+              <button onClick={resetSearch} className="bg-white text-gray-800 py-2 px-6 rounded-xl font-semibold border-2 border-gray-300 hover:bg-gray-100">
+                Search Again
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
